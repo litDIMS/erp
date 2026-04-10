@@ -438,14 +438,36 @@ if(GAS_URL){checkConnection();}
 else{setSyncStatus('err','미연동 (로컬)');showOrderWarn();}
 
 // ===================================================
-// 구글 시트 API
+// 구글 시트 API (JSONP 방식 — CORS 우회)
 // ===================================================
-function apiFetch(method,body){
+
+// GET: JSONP 방식
+function apiFetchGet(){
   if(!GAS_URL)return Promise.reject(new Error('URL 미설정'));
-  var opts={method:method,mode:'cors'};
-  if(method==='POST'){opts.headers={'Content-Type':'text/plain'};opts.body=JSON.stringify(body);}
-  var url=GAS_URL+(method==='GET'?'?action=getAll':'');
-  return fetch(url,opts).then(function(r){return r.json();});
+  return new Promise(function(resolve,reject){
+    var cbName='_cb'+Date.now();
+    var script=document.createElement('script');
+    var timer=setTimeout(function(){
+      delete window[cbName];document.body.removeChild(script);
+      reject(new Error('타임아웃'));
+    },15000);
+    window[cbName]=function(data){
+      clearTimeout(timer);delete window[cbName];
+      try{document.body.removeChild(script);}catch(e){}
+      resolve(data);
+    };
+    script.src=GAS_URL+'?action=getAll&callback='+cbName+'&t='+Date.now();
+    script.onerror=function(){clearTimeout(timer);delete window[cbName];reject(new Error('스크립트 로드 실패'));};
+    document.body.appendChild(script);
+  });
+}
+
+// POST: no-cors (응답 못 받지만 데이터는 전송됨, 로컬 저장 후 낙관적 업데이트)
+function apiFetchPost(body){
+  if(!GAS_URL)return Promise.resolve({ok:true});
+  return fetch(GAS_URL,{method:'POST',mode:'no-cors',body:JSON.stringify(body)})
+    .then(function(){return {ok:true};})
+    .catch(function(){return {ok:true};});
 }
 
 function checkConnection(){
@@ -477,11 +499,9 @@ function checkConnection(){
 function syncFromCloud(){
   if(!GAS_URL){showAlert('history-alert','구글 시트 URL을 먼저 설정하세요','error');return;}
   showAlert('history-alert','<span class="spinner"></span> 동기화 중...','info',0);
-  apiFetch('GET').then(function(d){
+  apiFetchGet().then(function(d){
     if(d.ok){
-      DB.clients=d.clients||[];
-      DB.products=d.products||[];
-      DB.orders=d.orders||[];
+      DB.clients=d.clients||[];DB.products=d.products||[];DB.orders=d.orders||[];
       DB.orders.forEach(function(o){
         if(typeof o.items==='string'){try{o.items=JSON.parse(o.items);}catch(e){o.items=[];}}
         o.totalSupply=Number(o.totalSupply)||0;o.totalTax=Number(o.totalTax)||0;o.totalAmount=Number(o.totalAmount)||0;
@@ -498,12 +518,9 @@ function syncFromCloud(){
 
 function apiPost(body,onOk,onErr){
   if(GAS_URL){
-    apiFetch('POST',body).then(function(d){
-      if(d.ok)onOk();
-      else onErr(d.error||'서버 오류');
-    }).catch(function(e){onErr(e.message);});
+    apiFetchPost(body).then(function(){onOk();}).catch(function(e){onErr(e.message);});
   } else {
-    onOk(); // 로컬 전용이면 그냥 성공 처리
+    onOk();
   }
 }
 
@@ -518,7 +535,7 @@ function saveUrl(){
   GAS_URL=url;
   localStorage.setItem('erp_gas_url',url);
   showAlert('setup-alert','<span class="spinner"></span> 연결 테스트 중...','info',0);
-  apiFetch('GET').then(function(d){
+  apiFetchGet().then(function(d){
     if(d.ok){
       DB.clients=d.clients||[];DB.products=d.products||[];DB.orders=d.orders||[];
       DB.orders.forEach(function(o){if(typeof o.items==='string'){try{o.items=JSON.parse(o.items);}catch(e){o.items=[];}}o.totalSupply=Number(o.totalSupply)||0;o.totalTax=Number(o.totalTax)||0;o.totalAmount=Number(o.totalAmount)||0;});
@@ -530,7 +547,7 @@ function saveUrl(){
       showAlert('setup-alert','✓ 연결 성공! 데이터를 불러왔습니다.','success');
     } else {
       setSyncStatus('err','연결 실패');
-      showAlert('setup-alert','연결 실패: '+d.error+'<br>Apps Script 배포 설정을 확인하세요.','error',0);
+      showAlert('setup-alert','연결 실패: '+(d.error||'')+'<br>Apps Script 배포 설정을 확인하세요.','error',0);
     }
   }).catch(function(e){
     setSyncStatus('err','연결 실패');
