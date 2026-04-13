@@ -615,7 +615,7 @@ function searchClients(){
            (c.email||'').toLowerCase().includes(q);
   }).slice(0,10);
   if(!res.length){box.innerHTML='<div class="sri" style="color:var(--text3)">검색 결과 없음</div>';box.style.display='block';return;}
-  var hl=function(t){return String(t).replace(new RegExp('('+q.replace(/[.*+?^${}()|[\]\]/g,'\$&')+')','gi'),'<span class="hl">$1</span>');};
+  var hl=function(t){var safe=q.replace(/[-\/\\^$*+?.()|[\]{}]/g,'\\$&');return String(t).replace(new RegExp('('+safe+')','gi'),'<span class="hl">$1</span>');};
   box.innerHTML=res.map(function(c){
     var idx=DB.clients.indexOf(c);
     return '<div class="sri" data-cidx="'+idx+'" onclick="selectClient('+idx+')">'+
@@ -701,7 +701,7 @@ function searchProds(){
     return p.name.toLowerCase().includes(q)||p.code.toLowerCase().includes(q)||(p.tags||'').toLowerCase().includes(q)||p.spec.toLowerCase().includes(q);
   }).slice(0,10);
   if(!res.length){box.innerHTML='<div class="sri" style="color:var(--text3)">검색 결과 없음</div>';box.style.display='block';return;}
-  var hl=function(t,q){return String(t).replace(new RegExp('('+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi'),'<span class="hl">$1</span>');};
+  var hl=function(t,q){var safe=q.replace(/[-\/\\^$*+?.()|[\]{}]/g,'\\$&');return String(t).replace(new RegExp('('+safe+')','gi'),'<span class="hl">$1</span>');};
   box.innerHTML=res.map(function(p){
     var i=DB.products.indexOf(p);
     var dp=Math.round(p.price*(1-currentDisc/100));
