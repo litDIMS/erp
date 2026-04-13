@@ -214,10 +214,15 @@ tbody tr:hover td{background:var(--bg2)}
   <div class="card">
     <div class="card-title">거래처 &amp; 날짜</div>
     <div class="form-row c3">
-      <div class="field"><label>거래처 *</label>
-        <select id="o-client" onchange="onClientChange()">
-          <option value="">— 거래처 선택 —</option>
-        </select>
+      <div class="field" style="position:relative">
+        <label>거래처 * (상호명·사업자번호 검색)</label>
+        <div class="search-wrap">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="client-search" placeholder="예: 홍길동상사, 1234..." autocomplete="off"
+            oninput="searchClients()" onkeydown="clientSearchKey(event)" onfocus="searchClients()">
+          <div class="search-results" id="client-search-results"></div>
+        </div>
+        <input type="hidden" id="o-client" value="">
       </div>
       <div class="field"><label>작성일자 *</label><input type="date" id="o-date"></div>
       <div class="field"><label>결제방식</label>
@@ -577,14 +582,64 @@ function nav(p,el){
 }
 
 // ===================================================
-// 거래처 SELECT (발주서)
+// 거래처 검색 (발주서)
 // ===================================================
+var clientSearchFocusIdx = -1;
+
 function refreshClientSelect(){
-  var sel=document.getElementById('o-client');
-  var cur=sel.value;
-  sel.innerHTML='<option value="">— 거래처 선택 —</option>';
-  DB.clients.forEach(function(c,i){sel.innerHTML+='<option value="'+i+'">'+c.name+'</option>';});
-  if(cur)sel.value=cur;
+  // 호환성 유지용 (내부에서만 사용)
+}
+
+function searchClients(){
+  var q=document.getElementById('client-search').value.trim().toLowerCase();
+  var box=document.getElementById('client-search-results');
+  clientSearchFocusIdx=-1;
+  if(q.length<1){
+    // 빈칸이면 전체 목록 표시
+    if(DB.clients.length===0){box.style.display='none';return;}
+    var all=DB.clients.slice(0,10);
+    box.innerHTML=all.map(function(c,i){
+      var idx=DB.clients.indexOf(c);
+      return '<div class="sri" data-cidx="'+idx+'" onclick="selectClient('+idx+')">'+
+        '<div><div class="sri-name">'+c.name+'</div>'+
+        '<div class="sri-sub">'+c.regno+(c.rep?' · '+c.rep:'')+'</div></div>'+
+        '<div class="sri-price" style="font-size:11px">'+(c.discount?'-'+c.discount+'%':'정가')+'</div></div>';
+    }).join('');
+    box.style.display='block';
+    return;
+  }
+  var res=DB.clients.filter(function(c){
+    return c.name.toLowerCase().includes(q)||
+           c.regno.includes(q)||
+           (c.rep||'').toLowerCase().includes(q)||
+           (c.email||'').toLowerCase().includes(q);
+  }).slice(0,10);
+  if(!res.length){box.innerHTML='<div class="sri" style="color:var(--text3)">검색 결과 없음</div>';box.style.display='block';return;}
+  var hl=function(t){return String(t).replace(new RegExp('('+q.replace(/[.*+?^${}()|[\]\]/g,'\$&')+')','gi'),'<span class="hl">$1</span>');};
+  box.innerHTML=res.map(function(c){
+    var idx=DB.clients.indexOf(c);
+    return '<div class="sri" data-cidx="'+idx+'" onclick="selectClient('+idx+')">'+
+      '<div><div class="sri-name">'+hl(c.name)+'</div>'+
+      '<div class="sri-sub">'+hl(c.regno)+(c.rep?' · '+hl(c.rep):'')+'</div></div>'+
+      '<div class="sri-price" style="font-size:11px">'+(c.discount?'-'+c.discount+'%':'정가')+'</div></div>';
+  }).join('');
+  box.style.display='block';
+}
+
+function clientSearchKey(e){
+  var items=document.querySelectorAll('#client-search-results .sri[data-cidx]');
+  if(e.key==='ArrowDown'){e.preventDefault();clientSearchFocusIdx=Math.min(clientSearchFocusIdx+1,items.length-1);items.forEach(function(el,i){el.classList.toggle('focused',i===clientSearchFocusIdx);});}
+  else if(e.key==='ArrowUp'){e.preventDefault();clientSearchFocusIdx=Math.max(clientSearchFocusIdx-1,0);items.forEach(function(el,i){el.classList.toggle('focused',i===clientSearchFocusIdx);});}
+  else if(e.key==='Enter'&&clientSearchFocusIdx>=0){items[clientSearchFocusIdx].click();}
+  else if(e.key==='Escape'){document.getElementById('client-search-results').style.display='none';}
+}
+
+function selectClient(idx){
+  var c=DB.clients[idx];
+  document.getElementById('o-client').value=idx;
+  document.getElementById('client-search').value=c.name;
+  document.getElementById('client-search-results').style.display='none';
+  onClientChange();
 }
 
 function onClientChange(){
@@ -665,7 +720,7 @@ function searchKey(e){
   else if(e.key==='Enter'&&sfIdx>=0){items[sfIdx].click();}
   else if(e.key==='Escape'){document.getElementById('search-results').style.display='none';}
 }
-document.addEventListener('click',function(e){if(!e.target.closest('#page-order .search-wrap'))document.getElementById('search-results').style.display='none';});
+document.addEventListener('click',function(e){if(!e.target.closest('#page-order .search-wrap'))document.getElementById('search-results').style.display='none';if(!e.target.closest('#client-search-results')&&!e.target.closest('#client-search'))document.getElementById('client-search-results').style.display='none';});
 
 function selectProd(pidx){
   selectedProd=DB.products[pidx];
@@ -754,7 +809,7 @@ function saveOrder(){
 
 function clearOrder(){
   orderItems=[];renderItems();
-  document.getElementById('o-client').value='';document.getElementById('o-date').value=today();
+  document.getElementById('o-client').value='';document.getElementById('client-search').value='';document.getElementById('o-date').value=today();
   document.getElementById('o-memo').value='';document.getElementById('client-bar').style.display='none';
   document.getElementById('order-alert').innerHTML='';document.getElementById('prod-search').value='';
   document.getElementById('sel-prod-bar').style.display='none';selectedProd=null;setDiscByValue(0);
