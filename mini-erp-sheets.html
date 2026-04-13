@@ -477,12 +477,11 @@ function apiFetchPost(body){
 
 function checkConnection(){
   setSyncStatus('loading','연결 중...');
-  apiFetch('GET').then(function(d){
+  apiFetchGet().then(function(d){
     if(d.ok){
       DB.clients=d.clients||[];
       DB.products=d.products||[];
       DB.orders=d.orders||[];
-      // orders의 items 필드가 JSON string일 수 있으므로 파싱
       DB.orders.forEach(function(o){
         if(typeof o.items==='string'){try{o.items=JSON.parse(o.items);}catch(e){o.items=[];}}
         o.totalSupply=Number(o.totalSupply)||0;
